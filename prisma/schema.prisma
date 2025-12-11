@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Business {
+  id          Int      @id @default(autoincrement())
+  name        String
+  category    String
+  address     String
+  phone       String
+  website     String
+  summary     String
+  description String
+  imageUrl    String?
+  isDeleted   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model HotlineMessage {
+  id        Int      @id @default(autoincrement())
+  name      String
+  contact   String?
+  audioUrl  String
+  isRead    Boolean  @default(false)
+  isArchived Boolean @default(false)
+  userId    String?
+  createdAt DateTime @default(now())
+}
+
+model Article {
+  id          Int      @id @default(autoincrement())
+  title       String
+  summary     String
+  content     String
+  author      String
+  imageUrl    String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Podcast {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String
+  audioUrl    String
+  imageUrl    String?
+  host        String
+  duration    String
+  playCount   Int      @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SocialAccount {
+  id           Int      @id @default(autoincrement())
+  platform     String   // "twitter"
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  username     String?
+  userId       String?
+  connectedAt  DateTime @default(now())
+}
+
+model FeedItem {
+  id           Int      @id @default(autoincrement())
+  platform     String   // "twitter"
+  externalId   String   @unique
+  content      String?
+  authorName   String
+  authorHandle String
+  mediaUrls    String   // JSON array of strings
+  originalUrl  String
+  postedAt     DateTime
+  importedAt   DateTime @default(now())
+  isHidden     Boolean  @default(false)
+}
