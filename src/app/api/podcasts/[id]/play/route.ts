@@ -3,9 +3,10 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    props: { params: Promise<{ id: string }> }
 ) {
-    const { id } = await params;
+    const params = await props.params;
+    const { id } = params;
     const podcastId = parseInt(id);
 
     if (isNaN(podcastId)) {
