@@ -1,45 +1,55 @@
 import { NextResponse } from 'next/server';
-
-export interface Podcast {
-    id: string;
-    title: string;
-    category: string;
-    publishedDate: string;
-    summary: string;
-    thumbnailUrl: string;
-    audioUrl: string; // Placeholder
-}
-
-const podcasts: Podcast[] = [
-    {
-        id: '1',
-        title: "Ep 1: The Beginning",
-        category: 'General',
-        publishedDate: '2025-01-01',
-        summary: "Hal introduces the show and talks about high school football.",
-        thumbnailUrl: 'https://placehold.co/400x400/png',
-        audioUrl: 'https://example.com/audio1.mp3',
-    },
-    {
-        id: '2',
-        title: "Ep 2: The Mayor Interview",
-        category: 'Politics',
-        publishedDate: '2025-01-08',
-        summary: "We ask the hard questions about the pothole situation on Main St.",
-        thumbnailUrl: 'https://placehold.co/400x400/png',
-        audioUrl: 'https://example.com/audio2.mp3',
-    },
-    {
-        id: '3',
-        title: "Ep 3: Local Legends",
-        category: 'History',
-        publishedDate: '2025-01-15',
-        summary: "Interview with the oldest resident in town, Mrs. Gable.",
-        thumbnailUrl: 'https://placehold.co/400x400/png',
-        audioUrl: 'https://example.com/audio3.mp3',
-    }
-];
+import { prisma } from '@/lib/prisma';
+import { verifyAuth } from '@/lib/auth';
+import { join } from 'path';
+import { writeFile, mkdir } from 'fs/promises';
+import { parseFile } from 'music-metadata';
 
 export async function GET() {
-    return NextResponse.json(podcasts);
+    try {
+        const podcasts = await prisma.podcast.findMany({
+            where: { isPublished: true },
+            orderBy: { createdAt: 'desc' },
+        });
+        return NextResponse.json(podcasts);
+    } catch (error) {
+        return NextResponse.json({ error: 'Failed to fetch podcasts' }, { status: 500 });
+    }
+}
+
+export async function POST(request: Request) {
+    const isAuthenticated = await verifyAuth();
+    if (!isAuthenticated) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    try {
+        const body = await request.json();
+        const { title, description, host, audioUrl, imageUrl } = body;
+
+        if (!audioUrl) {
+            return NextResponse.json({ error: 'Audio URL required' }, { status: 400 });
+        }
+
+        // Duration extraction via server-side 'music-metadata' requires a file stream/buffer.
+        // Since we are now getting a remote URL, we skip this complexity for the prototype.
+        const duration = "00:00";
+
+        const podcast = await prisma.podcast.create({
+            data: {
+                title,
+                description,
+                host,
+                audioUrl,
+                imageUrl,
+                duration,
+                isPublished: true,
+            },
+        });
+
+        return NextResponse.json(podcast);
+    } catch (error) {
+        console.error('Podcast creation error:', error);
+        return NextResponse.json({ error: 'Failed to create podcast' }, { status: 500 });
+    }
 }
