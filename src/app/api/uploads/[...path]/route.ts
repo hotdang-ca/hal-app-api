@@ -5,10 +5,11 @@ import mime from 'mime';
 
 export async function GET(
     request: NextRequest,
-    { params }: { params: { path: string[] } }
+    props: { params: Promise<{ path: string[] }> }
 ) {
     // Await params to ensure we have the path data
-    const { path } = await params;
+    const params = await props.params;
+    const { path } = params;
 
     if (!path || path.length === 0) {
         return new NextResponse('File not found', { status: 404 });
