@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToast } from '../../context/ToastContext';
 
 interface SocialStatus {
     twitter: { connected: boolean; username?: string };
@@ -19,6 +20,11 @@ export default function SocialManager() {
     const [fetchedTweets, setFetchedTweets] = useState<Tweet[]>([]);
     const [selectedTweets, setSelectedTweets] = useState<Set<string>>(new Set());
 
+    // Loading States
+    const [isFetching, setIsFetching] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const { showToast } = useToast();
+
     useEffect(() => {
         fetchStatus();
     }, []);
@@ -28,13 +34,22 @@ export default function SocialManager() {
     };
 
     const handleFetchPixels = async () => {
-        const res = await fetch('/api/social/twitter/fetch');
-        if (res.ok) {
-            const data = await res.json();
-            setFetchedTweets(data.tweets || []);
-        } else {
-            const err = await res.json();
-            alert(err.error || 'Failed to fetch tweets');
+        setIsFetching(true);
+        try {
+            const res = await fetch('/api/social/twitter/fetch');
+            if (res.ok) {
+                const data = await res.json();
+                setFetchedTweets(data.tweets || []);
+                showToast(`Fetched ${data.tweets?.length || 0} new tweets`, 'success');
+            } else {
+                const err = await res.json();
+                showToast(err.error || 'Failed to fetch tweets', 'error');
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Network error fetching tweets', 'error');
+        } finally {
+            setIsFetching(false);
         }
     };
 
@@ -42,18 +57,26 @@ export default function SocialManager() {
         const toImport = fetchedTweets.filter(t => selectedTweets.has(t.id));
         if (toImport.length === 0) return;
 
-        const res = await fetch('/api/social/import', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: toImport })
-        });
+        setIsImporting(true);
+        try {
+            const res = await fetch('/api/social/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: toImport })
+            });
 
-        if (res.ok) {
-            alert('Imported successfully!');
-            setSelectedTweets(new Set());
-            fetchStatus();
-        } else {
-            alert('Import failed');
+            if (res.ok) {
+                showToast('Imported successfully!', 'success');
+                setSelectedTweets(new Set());
+                fetchStatus();
+            } else {
+                showToast('Import failed', 'error');
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Error importing tweets', 'error');
+        } finally {
+            setIsImporting(false);
         }
     };
 
@@ -82,11 +105,13 @@ export default function SocialManager() {
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-lg">Import Content</h3>
                     <div className="flex gap-2">
-                        <button onClick={handleFetchPixels} disabled={!socialStatus?.twitter.connected} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50">
-                            Fetch Latest Posts
+                        <button onClick={handleFetchPixels} disabled={!socialStatus?.twitter.connected || isFetching} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50 flex items-center gap-2">
+                            {isFetching && <span className="animate-spin">↻</span>}
+                            {isFetching ? 'Fetching...' : 'Fetch Latest Posts'}
                         </button>
-                        <button onClick={handleImportTweets} disabled={selectedTweets.size === 0} className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50">
-                            Import Selected ({selectedTweets.size})
+                        <button onClick={handleImportTweets} disabled={selectedTweets.size === 0 || isImporting} className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50 flex items-center gap-2">
+                            {isImporting && <span className="animate-spin">↻</span>}
+                            {isImporting ? 'Importing...' : `Import Selected (${selectedTweets.size})`}
                         </button>
                     </div>
                 </div>

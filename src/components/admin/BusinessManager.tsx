@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useToast } from '../../context/ToastContext';
 
 interface Business {
     id: number;
@@ -15,6 +16,8 @@ interface Business {
 export default function BusinessManager() {
     const [businesses, setBusinesses] = useState<Business[]>([]);
     const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { showToast } = useToast();
 
     const fetchBusinesses = async () => {
         const res = await fetch('/api/businesses');
@@ -27,6 +30,7 @@ export default function BusinessManager() {
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        setIsSubmitting(true);
         const formData = new FormData(e.currentTarget);
         const data = Object.fromEntries(formData.entries());
 
@@ -37,19 +41,25 @@ export default function BusinessManager() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data),
                 });
-                if (res.ok) alert('Business updated');
+                if (res.ok) showToast('Business updated', 'success');
+                else throw new Error('Update failed');
             } else {
                 const res = await fetch('/api/businesses', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data),
                 });
-                if (res.ok) alert('Business created');
+                if (res.ok) showToast('Business created', 'success');
+                else throw new Error('Creation failed');
             }
             setEditingBusiness(null);
             fetchBusinesses();
             (e.target as HTMLFormElement).reset();
-        } catch { alert('Error submitting business'); }
+        } catch {
+            showToast('Error submitting business', 'error');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -66,7 +76,9 @@ export default function BusinessManager() {
                     <input name="website" defaultValue={editingBusiness?.website} className="border p-2 rounded" placeholder="Website" required />
                     <input name="summary" defaultValue={editingBusiness?.summary} className="border p-2 rounded" placeholder="Short Summary" required />
                     <textarea name="description" defaultValue={editingBusiness?.description} className="border p-2 rounded" placeholder="Full Description" rows={3} required />
-                    <button type="submit" className="bg-green-600 text-white p-2 rounded">{editingBusiness ? 'Update' : 'Create'}</button>
+                    <button type="submit" disabled={isSubmitting} className="bg-green-600 text-white p-2 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isSubmitting ? 'Saving...' : (editingBusiness ? 'Update' : 'Create')}
+                    </button>
                 </form>
 
                 <div className="space-y-4">
