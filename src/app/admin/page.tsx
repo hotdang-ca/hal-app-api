@@ -110,10 +110,14 @@ function AdminContent() {
     );
 }
 
+import { ToastProvider } from '../../context/ToastContext';
+
 export default function AdminDashboard() {
     return (
-        <Suspense fallback={<div>Loading Admin...</div>}>
-            <AdminContent />
-        </Suspense>
+        <ToastProvider>
+            <Suspense fallback={<div>Loading Admin...</div>}>
+                <AdminContent />
+            </Suspense>
+        </ToastProvider>
     );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../../lib/firebase';
+import { useToast } from '../../context/ToastContext';
 
 interface Article {
     id: number;
@@ -34,6 +35,9 @@ export default function ContentManager() {
     const [podcasts, setPodcasts] = useState<Podcast[]>([]);
     const [editingPodcast, setEditingPodcast] = useState<Podcast | null>(null);
 
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { showToast } = useToast();
+
     useEffect(() => {
         fetchArticles();
         fetchPodcasts();
@@ -65,23 +69,24 @@ export default function ContentManager() {
     // --- Article Logic ---
     const handleSubmitArticle = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        setIsSubmitting(true);
         const formData = new FormData(e.currentTarget);
         const file = formData.get('image') as File;
 
-        let imageUrl = editingArticle?.imageUrl || null;
-        if (file && file.size > 0) {
-            imageUrl = await handleFileUpload(file, 'articles');
-        }
-
-        const payload = {
-            title: formData.get('title'),
-            summary: formData.get('summary'),
-            content: formData.get('content'),
-            author: formData.get('author'),
-            imageUrl: imageUrl
-        };
-
         try {
+            let imageUrl = editingArticle?.imageUrl || null;
+            if (file && file.size > 0) {
+                imageUrl = await handleFileUpload(file, 'articles');
+            }
+
+            const payload = {
+                title: formData.get('title'),
+                summary: formData.get('summary'),
+                content: formData.get('content'),
+                author: formData.get('author'),
+                imageUrl: imageUrl
+            };
+
             let res;
             if (editingArticle) {
                 res = await fetch(`/api/articles/${editingArticle.id}`, {
@@ -98,48 +103,55 @@ export default function ContentManager() {
             }
 
             if (res.ok) {
-                alert('Article saved');
+                showToast('Article saved successfully', 'success');
                 setEditingArticle(null);
                 fetchArticles();
                 (e.target as HTMLFormElement).reset();
             } else {
-                alert('Failed to save article');
+                throw new Error('Failed to save article');
             }
-        } catch { alert('Error submitting article'); }
+        } catch (error) {
+            console.error(error);
+            showToast('Error submitting article', 'error');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     // --- Podcast Logic ---
     const handleSubmitPodcast = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        setIsSubmitting(true);
         const formData = new FormData(e.currentTarget);
         const audioFile = formData.get('audio') as File;
         const imageFile = formData.get('image') as File;
 
-        let audioUrl = editingPodcast?.audioUrl || '';
-        if (audioFile && audioFile.size > 0) {
-            const url = await handleFileUpload(audioFile, 'podcasts/audio');
-            if (url) audioUrl = url;
-        }
-
-        let imageUrl = editingPodcast?.imageUrl || null;
-        if (imageFile && imageFile.size > 0) {
-            imageUrl = await handleFileUpload(imageFile, 'podcasts/images');
-        }
-
-        if (!audioUrl) {
-            alert("Audio file is required");
-            return;
-        }
-
-        const payload = {
-            title: formData.get('title'),
-            description: formData.get('description'),
-            host: formData.get('host'),
-            audioUrl,
-            imageUrl
-        };
-
         try {
+            let audioUrl = editingPodcast?.audioUrl || '';
+            if (audioFile && audioFile.size > 0) {
+                const url = await handleFileUpload(audioFile, 'podcasts/audio');
+                if (url) audioUrl = url;
+            }
+
+            let imageUrl = editingPodcast?.imageUrl || null;
+            if (imageFile && imageFile.size > 0) {
+                imageUrl = await handleFileUpload(imageFile, 'podcasts/images');
+            }
+
+            if (!audioUrl) {
+                showToast("Audio file is required", 'error');
+                setIsSubmitting(false);
+                return;
+            }
+
+            const payload = {
+                title: formData.get('title'),
+                description: formData.get('description'),
+                host: formData.get('host'),
+                audioUrl,
+                imageUrl
+            };
+
             let res;
             if (editingPodcast) {
                 res = await fetch(`/api/podcasts/${editingPodcast.id}`, {
@@ -156,14 +168,19 @@ export default function ContentManager() {
             }
 
             if (res.ok) {
-                alert('Podcast saved');
+                showToast('Podcast saved successfully', 'success');
                 setEditingPodcast(null);
                 fetchPodcasts();
                 (e.target as HTMLFormElement).reset();
             } else {
-                alert('Failed to save podcast');
+                throw new Error('Failed to save podcast');
             }
-        } catch { alert('Error submitting podcast'); }
+        } catch (error) {
+            console.error(error);
+            showToast('Error submitting podcast', 'error');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -183,7 +200,9 @@ export default function ContentManager() {
                         <input name="summary" defaultValue={editingArticle?.summary} className="border p-2 rounded" placeholder="Summary" required />
                         <textarea name="content" defaultValue={editingArticle?.content} className="border p-2 rounded" placeholder="Content (Markdown)" rows={5} required />
                         <input type="file" name="image" className="border p-2 rounded" accept="image/*" />
-                        <button type="submit" className="bg-blue-600 text-white p-2 rounded">{editingArticle ? 'Update Article' : 'Create Article'}</button>
+                        <button type="submit" disabled={isSubmitting} className="bg-blue-600 text-white p-2 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSubmitting ? 'Saving Article...' : (editingArticle ? 'Update Article' : 'Create Article')}
+                        </button>
                     </form>
                     <div className="space-y-4">
                         <h3 className="font-bold">Existing Articles</h3>
@@ -223,7 +242,9 @@ export default function ContentManager() {
                         <label className="text-sm font-bold">Audio File {editingPodcast && "(Leave empty to keep)"}</label>
                         <input type="file" name="audio" className="border p-2 rounded" accept="audio/*" required={!editingPodcast} />
 
-                        <button type="submit" className="bg-purple-600 text-white p-2 rounded">{editingPodcast ? 'Update Podcast' : 'Upload Podcast'}</button>
+                        <button type="submit" disabled={isSubmitting} className="bg-purple-600 text-white p-2 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                            {isSubmitting ? 'Saving Podcast...' : (editingPodcast ? 'Update Podcast' : 'Upload Podcast')}
+                        </button>
                     </form>
                     <div className="space-y-4">
                         <h3 className="font-bold">Existing Podcasts</h3>
