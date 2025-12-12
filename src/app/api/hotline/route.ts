@@ -22,35 +22,19 @@ export async function GET() {
 
 export async function POST(request: Request) {
     try {
-        const formData = await request.formData();
-        const file = formData.get('audio') as File | null;
-        const name = formData.get('name') as string | null;
-        const userId = formData.get('userId') as string | null;
+        const body = await request.json();
+        const { name, userId, audioUrl } = body;
 
-        if (!file || !name) {
-            return NextResponse.json({ error: 'Missing file or name' }, { status: 400 });
+        if (!audioUrl || !name) {
+            return NextResponse.json({ error: 'Missing audioUrl or name' }, { status: 400 });
         }
 
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-
-        // Ensure upload directory exists
-        const uploadDir = join(process.cwd(), 'public/uploads');
-        await mkdir(uploadDir, { recursive: true });
-
-        // Save file locally
-        // Use timestamp to unique filename
-        const filename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '') || 'audio.m4a'}`;
-        const path = join(uploadDir, filename);
-        await writeFile(path, buffer);
-
         // Save DB Record
-        // public URL is /uploads/filename
         const message = await prisma.hotlineMessage.create({
             data: {
                 name,
                 userId: userId || null,
-                audioUrl: `/uploads/${filename}`,
+                audioUrl, // Direct URL from Firebase
                 isRead: false,
             },
         });
@@ -58,6 +42,6 @@ export async function POST(request: Request) {
         return NextResponse.json(message);
     } catch (error) {
         console.error('Upload error:', error);
-        return NextResponse.json({ error: 'Failed to upload message' }, { status: 500 });
+        return NextResponse.json({ error: 'Failed to save message' }, { status: 500 });
     }
 }

@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyAuth } from '@/lib/auth';
-import { join } from 'path';
-import { writeFile, mkdir } from 'fs/promises';
 
 export async function GET() {
     try {
@@ -23,24 +21,8 @@ export async function POST(request: Request) {
     }
 
     try {
-        const formData = await request.formData();
-        const title = formData.get('title') as string;
-        const summary = formData.get('summary') as string;
-        const content = formData.get('content') as string;
-        const author = formData.get('author') as string;
-        const file = formData.get('image') as File | null;
-
-        let imageUrl = null;
-
-        if (file) {
-            const bytes = await file.arrayBuffer();
-            const buffer = Buffer.from(bytes);
-            const uploadDir = join(process.cwd(), 'public/uploads');
-            await mkdir(uploadDir, { recursive: true });
-            const filename = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '') || 'image.jpg'}`;
-            await writeFile(join(uploadDir, filename), buffer);
-            imageUrl = `/uploads/${filename}`;
-        }
+        const body = await request.json();
+        const { title, summary, content, author, imageUrl } = body;
 
         const article = await prisma.article.create({
             data: {

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { collection, query, orderBy, limit, addDoc, onSnapshot, serverTimestamp, Timestamp, where, doc, updateDoc, writeBatch } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../lib/firebase';
 
 // --- Interfaces ---
 interface SocialStatus {
@@ -56,6 +57,7 @@ interface Podcast {
     host: string;
     description: string; // Added for editing
     audioUrl: string;
+    imageUrl: string | null;
     playCount: number;
     createdAt: string;
 }
@@ -269,18 +271,64 @@ export default function AdminDashboard() {
         setIsAuthenticated(false); setPassword('');
     };
 
+    const handleFileUpload = async (file: File | null, path: string): Promise<string | null> => {
+        if (!file) return null;
+        try {
+            const storageRef = ref(storage, `${path}/${Date.now()}-${file.name}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            return await getDownloadURL(snapshot.ref);
+        } catch (error) {
+            console.error("Upload failed", error);
+            alert("File upload failed");
+            return null;
+        }
+    };
+
     // --- Articles Logic ---
     const handleSubmitArticle = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
+        const file = formData.get('image') as File;
+
+        // Upload Image
+        let imageUrl = editingArticle?.imageUrl || null;
+        if (file && file.size > 0) {
+            imageUrl = await handleFileUpload(file, 'articles');
+        }
+
+        const payload = {
+            title: formData.get('title'),
+            summary: formData.get('summary'),
+            content: formData.get('content'),
+            author: formData.get('author'),
+            imageUrl: imageUrl
+        };
 
         try {
-            const res = await fetch('/api/articles', { method: 'POST', body: formData });
-            if (res.ok) {
-                alert('Article created!');
+            let res;
+            if (editingArticle) {
+                res = await fetch(`/api/articles/${editingArticle.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) alert('Article updated');
+            } else {
+                res = await fetch('/api/articles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) alert('Article created');
+            }
+
+            if (res?.ok) {
+                setEditingArticle(null);
                 fetchArticles();
                 (e.target as HTMLFormElement).reset();
-            } else alert('Failed to create article');
+            } else {
+                alert('Failed to save article');
+            }
         } catch { alert('Error submitting article'); }
     };
 
@@ -289,13 +337,60 @@ export default function AdminDashboard() {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
 
+        const audioFile = formData.get('audio') as File;
+        const imageFile = formData.get('image') as File;
+
+        // Upload Audio
+        let audioUrl = editingPodcast?.audioUrl || ''; // Required check later
+        if (audioFile && audioFile.size > 0) {
+            const url = await handleFileUpload(audioFile, 'podcasts/audio');
+            if (url) audioUrl = url;
+        }
+
+        // Upload Image
+        let imageUrl = editingPodcast?.imageUrl || null;
+        if (imageFile && imageFile.size > 0) {
+            imageUrl = await handleFileUpload(imageFile, 'podcasts/images');
+        }
+
+        if (!audioUrl) {
+            alert("Audio file is required");
+            return;
+        }
+
+        const payload = {
+            title: formData.get('title'),
+            description: formData.get('description'),
+            host: formData.get('host'),
+            audioUrl,
+            imageUrl
+        };
+
         try {
-            const res = await fetch('/api/podcasts', { method: 'POST', body: formData });
-            if (res.ok) {
-                alert('Podcast created!');
+            let res;
+            if (editingPodcast) {
+                res = await fetch(`/api/podcasts/${editingPodcast.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) alert('Podcast updated');
+            } else {
+                res = await fetch('/api/podcasts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) alert('Podcast created');
+            }
+
+            if (res?.ok) {
+                setEditingPodcast(null);
                 fetchPodcasts();
                 (e.target as HTMLFormElement).reset();
-            } else alert('Failed to create podcast');
+            } else {
+                alert('Failed to save podcast');
+            }
         } catch { alert('Error submitting podcast'); }
     };
 
@@ -572,23 +667,7 @@ export default function AdminDashboard() {
 
                         {contentSubTab === 'articles' && (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                <form onSubmit={async (e) => {
-                                    e.preventDefault();
-                                    const formData = new FormData(e.currentTarget);
-
-                                    try {
-                                        if (editingArticle) {
-                                            const res = await fetch(`/api/articles/${editingArticle.id}`, { method: 'PUT', body: formData });
-                                            if (res.ok) alert('Article updated');
-                                        } else {
-                                            const res = await fetch('/api/articles', { method: 'POST', body: formData });
-                                            if (res.ok) alert('Article created');
-                                        }
-                                        setEditingArticle(null);
-                                        fetchArticles();
-                                        (e.target as HTMLFormElement).reset();
-                                    } catch { alert('Error saving article'); }
-                                }} className="flex flex-col gap-3">
+                                <form onSubmit={handleSubmitArticle} className="flex flex-col gap-3">
                                     <h3 className="font-bold">{editingArticle ? 'Edit Article' : 'Add Article'}</h3>
                                     {editingArticle && <button type="button" onClick={() => setEditingArticle(null)} className="text-sm text-red-500 text-left mb-2">Cancel Edit</button>}
                                     <input name="title" defaultValue={editingArticle?.title} className="border p-2 rounded" placeholder="Title" required />
@@ -623,23 +702,7 @@ export default function AdminDashboard() {
 
                         {contentSubTab === 'podcasts' && (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                <form onSubmit={async (e) => {
-                                    e.preventDefault();
-                                    const formData = new FormData(e.currentTarget);
-
-                                    try {
-                                        if (editingPodcast) {
-                                            const res = await fetch(`/api/podcasts/${editingPodcast.id}`, { method: 'PUT', body: formData });
-                                            if (res.ok) alert('Podcast updated');
-                                        } else {
-                                            const res = await fetch('/api/podcasts', { method: 'POST', body: formData });
-                                            if (res.ok) alert('Podcast created');
-                                        }
-                                        setEditingPodcast(null);
-                                        fetchPodcasts();
-                                        (e.target as HTMLFormElement).reset();
-                                    } catch { alert('Error saving podcast'); }
-                                }} className="flex flex-col gap-3">
+                                <form onSubmit={handleSubmitPodcast} className="flex flex-col gap-3">
                                     <h3 className="font-bold">{editingPodcast ? 'Edit Podcast' : 'Add Podcast'}</h3>
                                     {editingPodcast && <button type="button" onClick={() => setEditingPodcast(null)} className="text-sm text-red-500 text-left mb-2">Cancel Edit</button>}
                                     <input name="title" defaultValue={editingPodcast?.title} className="border p-2 rounded" placeholder="Title" required />
